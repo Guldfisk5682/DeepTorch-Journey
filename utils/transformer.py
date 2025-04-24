@@ -145,6 +145,7 @@ class DecoderBlock(nn.Module):
         return self.addnorm3(self.ffn(X),X)
 
 class Transformer(nn.Module):
+    '''Transformer'''
     def __init__(self,vocab_size,num_layers=6, d_model=512, ffn_hidden=2048, num_heads=8, dropout=0.1):
         super().__init__()
         self.embedding=nn.Embedding(vocab_size,d_model)
