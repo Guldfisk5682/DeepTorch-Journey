@@ -15,7 +15,7 @@ def transpose_output(X,num_heads):
     X=X.permute(0,2,1,3)
     return X.reshape(X.shape[0],X.shape[1],-1) # 变为(batch,seq_len,d_model)
 
-def masked_softmax(X,valid_len):
+def masked_softmax(X,valid_len,causal_mask=False):
     '''
     变长序列遮蔽处理,valid_len为(bacth,seq_len)或(batch,)
     输入X形状为(batch,q_seq_len,k_seq_len)
@@ -27,9 +27,18 @@ def masked_softmax(X,valid_len):
         valid_len=valid_len[:,None]
     # 在最后一个维度实施mask,因为最后一个维度是key_seql_len(长度为seq_len)
     # 遮蔽的目的是掩盖掉无效的key_seql_len
-    mask[:,:,:valid_len.max()]=False
+    if not causal_mask:
+        mask[:,:,:valid_len.max()]=False
     X_masked=X.masked_fill(mask,-1e6)
     return torch.softmax(X_masked,dim=-1)
+
+def create_causal_mask(seq_len,batch_size,num_heads):
+    '''创建因果掩码'''
+    causal_mask=torch.triu(torch.ones(seq_len,seq_len),diagonal=1).bool()
+    # expand 将掩码复制到每个batch和每个注意力头
+    # 最终形状为 (batch_size * num_heads, seq_len, seq_len)
+    causal_mask=causal_mask.unsqueeze(0).expand(batch_size*num_heads,-1,-1)
+    return causal_mask
 
 class DotProductAttention(nn.Module):
     '''缩放点积注意力'''
@@ -37,12 +46,12 @@ class DotProductAttention(nn.Module):
         super().__init__()
         self.dropout=nn.Dropout(dropout)
         
-    def forward(self,queries,keys,values,valid_len=None):
+    def forward(self,queries,keys,values,valid_len=None,causal_mask=False):
         # 输入数据形状为(batch,seq_len,d_model)
         d=queries.shape[-1]
         # scores形状为(batch,q_seq_len,k_seq_len) 两个seq_len形状相同意义不同
         scores=torch.bmm(queries,keys.transpose(1,2))/math.sqrt(d)
-        self.attention_weights=masked_softmax(scores,valid_len)
+        self.attention_weights=masked_softmax(scores,valid_len,causal_mask)
         return torch.bmm(self.dropout(self.attention_weights),values)
 
 class MultiHeadAttention(nn.Module):
@@ -58,7 +67,7 @@ class MultiHeadAttention(nn.Module):
         self.W_v=nn.Linear(d_model,d_model,bias=False)
         self.W_o=nn.Linear(d_model,d_model,bias=False)
     
-    def forward(self,queries,keys,values,valid_len=None):
+    def forward(self,queries,keys,values,valid_len=None,causal_mask=False):
         # 处理后数据形状变为(batch * num_heads, seq_length, head_dim)
         q_trans = transpose_qkv(self.W_q(queries), self.num_heads)
         k_trans = transpose_qkv(self.W_k(keys), self.num_heads)
@@ -70,7 +79,7 @@ class MultiHeadAttention(nn.Module):
         if valid_len is not None:
             valid_len=torch.repeat_interleave(valid_len,self.num_heads,dim=0)
 
-        attention_output = self.attention(q_trans, k_trans, v_trans, valid_len)
+        attention_output = self.attention(q_trans, k_trans, v_trans, valid_len,causal_mask)
         output=transpose_output(attention_output,self.num_heads)
         return self.W_o(output)
 
@@ -140,7 +149,7 @@ class DecoderBlock(nn.Module):
     
     def forward(self,X,enc_output,valid_len=None,causal_mask=None):
         # 遮蔽未来信息
-        X=self.addnorm1(self.masked_attention(X,X,X,causal_mask),X)
+        X=self.addnorm1(self.masked_attention(X,X,X,causal_mask,True),X)
         X=self.addnorm2(self.attention(X,enc_output,enc_output,valid_len),X)
         return self.addnorm3(self.ffn(X),X)
 
@@ -148,6 +157,7 @@ class Transformer(nn.Module):
     '''Transformer'''
     def __init__(self,vocab_size,num_layers=6, d_model=512, ffn_hidden=2048, num_heads=8, dropout=0.1):
         super().__init__()
+        self.num_heads=num_heads
         self.embedding=nn.Embedding(vocab_size,d_model)
         self.pos_encoding = PositionEncoding(d_model, dropout)
         self.encoder = nn.ModuleList([

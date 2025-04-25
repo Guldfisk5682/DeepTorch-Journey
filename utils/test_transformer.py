@@ -1,5 +1,6 @@
 import torch
 from transformer import Transformer
+from transformer import create_causal_mask
 
 def test_transformer():
     # 设置参数
@@ -20,21 +21,16 @@ def test_transformer():
         ffn_hidden=ffn_hidden
     )
     
+
+    
     # 创建输入数据
     enc_input = torch.randint(0, vocab_size, (batch_size, seq_len))
     dec_input = torch.randint(0, vocab_size, (batch_size, seq_len))
     
     # 创建掩码
     valid_len = torch.randint(1, seq_len + 1, (batch_size,))
-    # 创建因果掩码，防止解码器看到未来信息
-    # 首先创建一个上三角矩阵，对角线为1，上三角为0
-    causal_mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()   
-    # 将掩码扩展到适合多头注意力的形状
-    # unsqueeze(0) 在第0维增加一个维度，用于批处理
-    # expand 将掩码复制到每个batch和每个注意力头
-    # 最终形状为 (batch_size * num_heads, seq_len, seq_len)
-    causal_mask = causal_mask.unsqueeze(0).expand(batch_size * num_heads, -1, -1)
-    
+
+    causal_mask=create_causal_mask(seq_len,batch_size,num_heads)
     # 前向传播
     output = model(enc_input, dec_input, valid_len, causal_mask)
     
