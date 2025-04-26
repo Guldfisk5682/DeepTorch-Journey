@@ -50,6 +50,8 @@ class DotProductAttention(nn.Module):
         # 输入数据形状为(batch,seq_len,d_model)
         d=queries.shape[-1]
         # scores形状为(batch,q_seq_len,k_seq_len) 两个seq_len形状相同意义不同
+        # 这里之所以要除以sqrt(d)是因为原始分数的方差是d
+        # 除以sqrt(d)后方差变为1，softmax的输入保持单位方差，维持梯度稳定
         scores=torch.bmm(queries,keys.transpose(1,2))/math.sqrt(d)
         self.attention_weights=masked_softmax(scores,valid_len,causal_mask)
         return torch.bmm(self.dropout(self.attention_weights),values)
@@ -158,7 +160,11 @@ class Transformer(nn.Module):
     def __init__(self,vocab_size,num_layers=6, d_model=512, ffn_hidden=2048, num_heads=8, dropout=0.1):
         super().__init__()
         self.num_heads=num_heads
-        self.embedding=nn.Embedding(vocab_size,d_model)
+        # 这里要乘以根号d_model是因为
+        # embedding的初始化使用的是xavier 方差通常是1/sqrt(d_model)
+        # 乘sqrt(d_model)后方差变为1，加速模型收敛，
+        # 同时这样可以让embedding数值接近位置编码
+        self.embedding=nn.Embedding(vocab_size,d_model)*math.sqrt(d_model)
         self.pos_encoding = PositionEncoding(d_model, dropout)
         self.encoder = nn.ModuleList([
             EncoderBlock(d_model,ffn_hidden,num_heads,dropout)
