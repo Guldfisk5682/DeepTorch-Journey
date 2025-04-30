@@ -70,7 +70,7 @@ class Vocabulary:
         if t is not None and total_count>0:
             counter=dict(counter)
             for token in self.token2idx:
-                relative_freq=counter[token]/total_count # 全局相对频率
+                relative_freq=counter.get(token, 0) / total_count # 全局相对频率
                 if relative_freq>t: # 低于该阈值必然可以全部保留
                     keep_prob=math.sqrt(t/relative_freq) 
                     self.subsampling_prob[token]=keep_prob

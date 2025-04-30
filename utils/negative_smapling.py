@@ -1,9 +1,13 @@
 from skip_gram import SkipGramModel
 from Vocab import Vocabulary
 from Vocab import tokenize
+from apply_word_embed import find_similar_token
+from Vocab import subsampling
 import torch
 import torch.nn.functional as F
 import torch.optim as optim 
+import pandas as pd
+from datasets import load_dataset
 
 def negative_sampling(center_words,vocab_size,n_sample):
     '''
@@ -136,19 +140,19 @@ def train_skipgram(model,sentences,vocab,window_size,n_samples,lr,epochs,device)
             optimizer.step()
         print(f"Epoch {epoch+1}/{epochs}, Loss: {total_loss/num_batch:.4f}")
         
-        
+    
 if __name__ == '__main__':
     # 准备数据
-    text_data = [
-        "This is the first sentence.",
-        "This is the second sentence.",
-        "And this is the third one."
-        ]
-    tokenized_sentences = [tokenize(text) for text in text_data]
-
+    # raw_dataset=load_dataset('ag_news',cache_dir="../data")
+    # train_set=raw_dataset['train']
+    # train_set.to_csv("../data/ag_news_train.csv",index=False)
+    train_set=pd.read_csv("../data/ag_news_train.csv")
+    train_set=train_set['text'].head(3000).tolist() # 选取前3000行作为训练数据
+    tokenized_sentences=[tokenize(text) for text in train_set]
+    
     # 构建词汇表
-    vocab = Vocabulary(tokens=tokenized_sentences, freq_threshold=1)
-
+    vocab = Vocabulary(tokens=tokenized_sentences, freq_threshold=3,t=1e-4)
+    tokenized_sentences=subsampling(tokenized_sentences,vocab)
     # 创建模型
     embed_dim = 100
     model = SkipGramModel(len(vocab), embed_dim)
@@ -157,8 +161,10 @@ if __name__ == '__main__':
     window_size = 2
     n_samples = 5
     learning_rate = 0.001
-    epochs = 10
+    epochs = 20 # 数据仅用作示例
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # 训练模型
     train_skipgram(model, tokenized_sentences, vocab, window_size, n_samples, learning_rate, epochs, device)
+    torch.save(model,'../model/skip_gram.pth')
+    # similar_token=find_similar_token('and',model,vocab,2)
