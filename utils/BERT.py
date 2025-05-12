@@ -16,7 +16,7 @@ class BERTEmbedding(nn.Module):
       - 属于第二个片段（包括第二个 [SEP]）的所有 token 的 segment_id 通常是 1
     segment_ids 的长度必须与 token_ids 的长度 seq_len 完全相同
     '''
-    def __init__(self,vocab_size,d_model,max_len=512,num_segments=2,dropout=0.5):
+    def __init__(self,vocab_size,d_model,max_len=128,num_segments=2,dropout=0.5):
         '''
         num_segments允许模型为预定义的几种片段类型学习不同的基础嵌入。这些基础嵌入为后续的
         Transformer 层提供了一个关于片段身份的信号，
