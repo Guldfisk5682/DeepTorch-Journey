@@ -1,3 +1,4 @@
 practise*.ipynb
 pytorch*.ipynb
 tensorflow*.ipynb
+model/*.pth

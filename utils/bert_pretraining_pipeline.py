@@ -1,12 +1,16 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from transformers import AutoTokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 from datasets import load_dataset
 import random
 from try_device import try_gpu
 from tqdm import tqdm # 用于显示进度条
 from BERT import BERTForPreTraining
 from plot_loss_curver import LiveLossPlotter
+import os
+
+# 真实Bert需要远多于该示例的数据量和epochs，受条件所限，数据仅供训练参考用
+# 训练过程的loss图在resources中
 
 # 配置参数
 CONFIG={
@@ -14,11 +18,11 @@ CONFIG={
     "dataset_config_name": "wikitext-2-raw-v1", # 使用原始版本，未经过预处理
     "tokenizer_name": "bert-base-uncased", # BERT基础模型（不区分大小写）分词器
     "max_len": 128, 
-    "batch_size": 16, 
-    "num_epochs": 100, # 预训练通常需要很多epoch，这里为了演示设为100
+    "batch_size": 32, 
+    "num_epochs": 50, # 预训练通常需要很多epoch，这里为了演示设为50
     "learning_rate": 5e-5,
     "adam_epsilon": 1e-8,
-    "warmup_steps": 0,
+    "warmup_steps": 5,
     "mlm_probability": 0.15, # 15% 的 token 会被mask
     "nsp_probability": 0.5, # 50% 的样本是 IsNext, 50% 是 NotNext
 
@@ -243,7 +247,7 @@ if __name__=="__main__":
     print("加载数据集")
     # wikitext-2-raw-v1 只有 train, validation, test 三个split
     raw_datasets=load_dataset(CONFIG["dataset_name"],CONFIG["dataset_config_name"],)
-    train_dataset_raw = raw_datasets['train'].select(range(6000)) # 只取前6000条做测试
+    train_dataset_raw = raw_datasets['train']# .select(range(6000)) # 只取前6000条做测试
     print(f"training instance : {train_dataset_raw[0]}")
     
     bert_train_dataset = WikiTextBertDataset(
@@ -281,7 +285,7 @@ if __name__=="__main__":
     print(f"Number of trainable parameters: {num_params/1e6:.2f} M")
     
     # 设置优化器和学习率调度器
-    optimizer = AdamW(model.parameters(), lr=CONFIG["learning_rate"], eps=CONFIG["adam_epsilon"])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=CONFIG["learning_rate"], eps=CONFIG["adam_epsilon"])
     # get_linear_schedule_with_warmup 在warmup步内，学习率从0线性增加到初始lr 接着线性衰减到0
     num_training_steps = len(train_dataloader) * CONFIG["num_epochs"]
     scheduler = get_linear_schedule_with_warmup(optimizer,num_warmup_steps=CONFIG["warmup_steps"],
@@ -296,6 +300,8 @@ if __name__=="__main__":
     train_bert(model,train_dataloader,optimizer,scheduler,CONFIG["num_epochs"],device)
     print("训练完成")
 
-    # print("保存模型中")
-    # torch.save(model.state_dict(),"../model/BERT_model.pth")
-    # print("保存完成")
+    print("保存模型中")
+    script_dir=os.path.dirname(os.path.abspath(__file__))
+    model_path=os.path.join(script_dir,"../model/bert_model.pth")
+    torch.save(model.state_dict(),model_path)
+    print("保存完成")
